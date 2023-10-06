@@ -1,73 +1,86 @@
-import tkinter as tk
-from tkinter import filedialog
-from PIL import Image
 import os
 import datetime
-import concurrent.futures
+import tkinter as tk
+from tkinter import filedialog
+from tkinter import ttk
+from PIL import Image
 
-def converter_arquivo(caminho_origem, caminho_destino, largura_alvo):
-    imagem = Image.open(caminho_origem)
-    largura_original, altura_original = imagem.size
+def selecionar_pasta_origem():
+    global pasta_origem
+    pasta_origem = filedialog.askdirectory()
+    label_pasta_origem.config(text=f'Pasta de Origem: {pasta_origem}')
 
-    nova_altura = int(largura_alvo * (altura_original / largura_original))
+def selecionar_pasta_destino():
+    global pasta_destino_principal
+    pasta_destino_principal = filedialog.askdirectory()
+    label_pasta_destino.config(text=f'Pasta de Destino: {pasta_destino_principal}')
 
-    imagem = imagem.resize((largura_alvo, nova_altura), Image.ANTIALIAS)
-    imagem.save(caminho_destino, 'JPEG')
+def converter_imagens():
+    if not os.path.exists(pasta_destino_principal):
+        status_label.config(text=f"A pasta de destino principal '{pasta_destino_principal}' não existe ou não é acessível.")
+        return
 
-def iniciar_conversao():
-    pasta_origem = pasta_origem_var.get()
-    pasta_destino_principal = pasta_destino_var.get()
+    data_hora_atual = datetime.datetime.now()
+    nome_pasta_destino = data_hora_atual.strftime("%Y-%m-%d_%H-%M-%S")
+    pasta_destino = os.path.join(pasta_destino_principal, nome_pasta_destino)
 
-    if not os.path.exists(pasta_origem):
-        resultado_label.config(text=f"A pasta de origem '{pasta_origem}' não existe ou não é acessível.")
-    elif not os.path.exists(pasta_destino_principal):
-        resultado_label.config(text=f"A pasta de destino principal '{pasta_destino_principal}' não existe ou não é acessível.")
-    else:
-        tempo_inicio = datetime.datetime.now()
+    if not os.path.exists(pasta_destino):
+        os.makedirs(pasta_destino)
 
-        data_hora_atual = tempo_inicio.strftime("%Y-%m-%d_%H-%M-%S")
-        pasta_destino = os.path.join(pasta_destino_principal, data_hora_atual)
+    start_time = datetime.datetime.now()
+    formato_origem = formato_origem_combobox.get()
+    formato_destino = formato_destino_combobox.get()
+    for arquivo in os.listdir(pasta_origem):
+        if arquivo.endswith(f'.{formato_origem}'):
+            caminho_completo_origem = os.path.join(pasta_origem, arquivo)
+            nome_arquivo_sem_extensao = os.path.splitext(arquivo)[0]
+            caminho_completo_destino = os.path.join(pasta_destino, f'{nome_arquivo_sem_extensao}.{formato_destino}')
+            imagem = Image.open(caminho_completo_origem)
+            imagem = imagem.convert('RGB')
+            imagem.save(caminho_completo_destino, formato_destino)
 
-        if not os.path.exists(pasta_destino):
-            os.makedirs(pasta_destino)
+            status_label.config(text=f'Convertendo: {arquivo} para {nome_arquivo_sem_extensao}.{formato_destino}')
 
-        arquivos_a_converter = [arquivo for arquivo in os.listdir(pasta_origem) if arquivo.endswith('.CR2')]
-        
-        num_threads = min(4, len(arquivos_a_converter))
+    end_time = datetime.datetime.now()
+    elapsed_time = end_time - start_time
+    status_label.config(text=f'Conversão concluída em {elapsed_time.total_seconds():.2f} segundos.')
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
-            for arquivo in arquivos_a_converter:
-                caminho_completo_origem = os.path.join(pasta_origem, arquivo)
-                nome_arquivo_sem_extensao = os.path.splitext(arquivo)[0]
-                caminho_completo_destino = os.path.join(pasta_destino, f'{nome_arquivo_sem_extensao}.jpg')
-
-                largura_alvo = 1280
-                executor.submit(converter_arquivo, caminho_completo_origem, caminho_completo_destino, largura_alvo)
-
-        tempo_fim = datetime.datetime.now()
-        tempo_total = tempo_fim - tempo_inicio
-
-        resultado_label.config(text=f'Conversão concluída em {tempo_total}.')
-        resultado_label.update()
-
+# Configuração da janela principal
 root = tk.Tk()
-root.title("Conversor de Imagens")
-root.geometry("400x250")
+root.title('Conversor de Imagens')
+root.geometry('500x400')
 
-pasta_origem_var = tk.StringVar()
-pasta_destino_var = tk.StringVar()
+# Crie um estilo com uma aparência mais limpa
+style = ttk.Style()
+style.theme_use('clam')
 
-tk.Label(root, text="Pasta de origem:").pack()
-tk.Entry(root, textvariable=pasta_origem_var).pack()
-tk.Button(root, text="Selecionar pasta", command=lambda: pasta_origem_var.set(filedialog.askdirectory())).pack()
+# Labels para exibir informações
+label_pasta_origem = tk.Label(root, text='Pasta de Origem: Nenhuma pasta selecionada')
+label_pasta_destino = tk.Label(root, text='Pasta de Destino: Nenhuma pasta selecionada')
+status_label = tk.Label(root, text='Aguardando conversão...')
 
-tk.Label(root, text="Pasta de destino:").pack()
-tk.Entry(root, textvariable=pasta_destino_var).pack()
-tk.Button(root, text="Selecionar pasta", command=lambda: pasta_destino_var.set(filedialog.askdirectory())).pack()
+label_pasta_origem.pack(pady=10)
+label_pasta_destino.pack(pady=10)
+status_label.pack(pady=10)
 
-tk.Button(root, text="Iniciar Conversão", command=iniciar_conversao).pack()
+# Comboboxes para escolher os formatos de origem e destino
+formatos_disponiveis = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'CR2']  # Adicione outros formatos, se necessário
+formato_origem_combobox = ttk.Combobox(root, values=formatos_disponiveis)
+formato_destino_combobox = ttk.Combobox(root, values=formatos_disponiveis)
 
-resultado_label = tk.Label(root, text="")
-resultado_label.pack()
+formato_origem_combobox.set('png')  # Formato de origem padrão
+formato_destino_combobox.set('jpg')  # Formato de destino padrão
+
+formato_origem_combobox.pack(pady=10)
+formato_destino_combobox.pack(pady=10)
+
+# Botões para seleção de pastas e início da conversão
+btn_selecionar_origem = ttk.Button(root, text='Selecionar Pasta de Origem', command=selecionar_pasta_origem)
+btn_selecionar_destino = ttk.Button(root, text='Selecionar Pasta de Destino', command=selecionar_pasta_destino)
+btn_converter = ttk.Button(root, text='Converter Imagens', command=converter_imagens)
+
+btn_selecionar_origem.pack(pady=10)
+btn_selecionar_destino.pack(pady=10)
+btn_converter.pack(pady=10)
 
 root.mainloop()
